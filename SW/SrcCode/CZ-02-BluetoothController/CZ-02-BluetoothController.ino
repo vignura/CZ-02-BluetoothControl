@@ -25,7 +25,33 @@
 #define RELAY 					PIN_A0
 /***********************************************************************************************/
 
-#define SELF_TEST_COUNT			0x01
+#define SELF_TEST_COUNT						0x01
+#define MAX_DATA_LEN_BYTES				128
+
+#define BTH_CMD_BASE							0x00
+#define CMD_PER_SELF_TEST					(BTH_CMD_BASE + 1)
+#define CMD_SET_RELAY_STATE				(BTH_CMD_BASE + 2)
+
+#pragma pack (push, 1)
+
+typedef struct 
+{
+	unsigned short usHeader;	/* 0xAA55 */
+	unsigned short usDataLen;	/* length of data */
+	unsigned short usCmdID;		/* command ID */
+	unsigned char ucData[MAX_DATA_LEN_BYTES];
+
+}S_BTH_PACKET;
+
+/************************* Command  Structure for CMD_SET_RELAY_STATE **************************/
+typedef struct 
+{
+	usigned char ucRelaySate; /* 0 - OFF; 1 - ON */
+
+}S_CMD_SET_RELAY_STATE;
+
+#pragma pack (pop)
+
 /***********************************************************************************************/
 /*! 
 * \fn         :: setup()
