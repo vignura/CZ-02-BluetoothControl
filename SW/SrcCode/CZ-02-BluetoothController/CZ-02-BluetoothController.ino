@@ -1,4 +1,4 @@
- /***********************************************************************************************/
+  /***********************************************************************************************/
 /*
  *  \file       : CZ-02-BluetoothController.ino
  *  \date       : 02-DEC-2018 
@@ -8,6 +8,10 @@
 /*
 /***********************************************************************************************/
 // headers
+#include <SoftwareSerial.h>
+
+SoftwareSerial SS_Debug(10, 11);
+int g_iRelayState = 0;
 
 /*************************************** Pin Mappings ******************************************/
 // ground plane
@@ -25,32 +29,25 @@
 #define RELAY           PIN_A0
 /***********************************************************************************************/
 
-#define SELF_TEST_COUNT           0x01
-#define MAX_DATA_LEN_BYTES        128
+#define SELF_TEST_COUNT                     0x01
+#define HC05_BUAD_RATE                      9600
+#define DEBUG_BUAD_RATE                     9600
+#define HC05_SERIAL_READ_DELAY_MS           0x02
 
-#define BTH_CMD_BASE              0x00
-#define CMD_PER_SELF_TEST         (BTH_CMD_BASE + 1)
-#define CMD_SET_RELAY_STATE       (BTH_CMD_BASE + 2)
+/* bluetooth command Strings*/
+#define CMD_RELAY_ON                      "RelayOn"
+#define CMD_RELAY_OFF                     "RelayOff"
+#define CMD_START_TEST                    "StartTest"
 
-#pragma pack (push, 1)
+/* bluetooth command IDs */
+#define CMD_INVALID_CMD_ID                  -1
+#define CMD_RELAY_ON_ID                     0x01 
+#define CMD_RELAY_OFF_ID                    0x02
+#define CMD_START_TEST_ID                   0x03
 
-typedef struct 
-{
-  unsigned short usHeader;  /* 0xAA55 */
-  unsigned short usDataLen; /* length of data */
-  unsigned short usCmdID;   /* command ID */
-  unsigned char ucData[MAX_DATA_LEN_BYTES];
-
-}S_BTH_PACKET;
-
-/************************* Command  Structure for CMD_SET_RELAY_STATE **************************/
-typedef struct 
-{
-  unsigned char ucRelaySate; /* 0 - OFF; 1 - ON */
-
-}S_CMD_SET_RELAY_STATE;
-
-#pragma pack (pop)
+/* Relay states */
+#define RELAY_STATE_ON                      0x00
+#define RELAY_STATE_OFF                     0x01 
 
 /***********************************************************************************************/
 /*! 
@@ -76,9 +73,15 @@ void setup() {
 
   // Relay initialization
   pinMode(RELAY, OUTPUT);
+  digitalWrite(RELAY, LOW);
+  g_iRelayState = RELAY_STATE_OFF;
+
+  // Serial port initialization
+  Serial.begin(HC05_BUAD_RATE);
+  SS_Debug.begin(DEBUG_BUAD_RATE);
 
   // perform self test
-  SelfTest(SELF_TEST_COUNT);
+  //SelfTest(SELF_TEST_COUNT);
 
 }
 
@@ -96,11 +99,106 @@ void setup() {
 /***********************************************************************************************/
 void loop() {
 
-  // check for any commands
+  char arrcCmd[10] = {0};
+  char arrcMsg[32] = {0};
+  int iIndex = 0;
+  int iCmdID = 0;
 
-  // if any command is received, process it
+  // read data from HC-05 if available
+  while(iIndex < 10)
+  {
+    delay(HC05_SERIAL_READ_DELAY_MS);
+    
+    if(Serial.available())
+    {
+      arrcCmd[iIndex] = Serial.read();
+      iIndex++;
+    }
+    else
+    {
+      break;
+    }
+  }
+  
+  // print to debug if data is avialible
+  if(iIndex > 0)
+  {
+    sprintf(arrcMsg, "[%d] %s", iIndex, arrcCmd);
+    SS_Debug.println(arrcMsg);
+  }
+  
+  if(isValidCmd(arrcCmd, iIndex, &iCmdID) == true)
+  {
+    switch(iCmdID)
+    {
+      case CMD_RELAY_ON_ID:
 
-  // write the Relay ON time to EEPROM 
+        // turn on relay
+        digitalWrite(RELAY, HIGH);
+        // set the relay state flag to on state
+        g_iRelayState = RELAY_STATE_ON;
+
+        sprintf(arrcMsg, "Turning Relay ON");
+        SS_Debug.println(arrcMsg);
+      break;
+
+      case CMD_RELAY_OFF_ID:
+
+        // turn off relay
+        digitalWrite(RELAY, LOW);
+        // set the relay state flag to off state
+        g_iRelayState = RELAY_STATE_OFF;
+
+        sprintf(arrcMsg, "Turning Relay OFF");
+        SS_Debug.println(arrcMsg);
+      break;
+
+      case CMD_START_TEST_ID:
+
+        sprintf(arrcMsg, "Performing Self Test");
+        SS_Debug.println(arrcMsg);
+        // perform self test
+        SelfTest(0x01);
+      break;
+
+      default:
+        ;// do nothing 
+    }
+  }
+  else
+  {
+    // do nothing
+  }
+}
+
+/***********************************************************************************************/
+/*! 
+* \fn         :: BuletoothTerminal()
+* \author     :: Vignesh S
+* \date       :: 03-DEC-2018
+* \brief      :: This function perform bluethooth terminal emulation
+* \param[in]  :: None
+* \param[out] :: None
+* \return     :: None
+*/
+/***********************************************************************************************/
+void BuletoothTerminal()
+{
+  // if data is available in bluetooth, send it to debug
+  if(Serial.available())
+  {
+    SS_Debug.write(Serial.read());
+    // echo
+    //Serial.write(Serial.read());
+    //digitalWrite(LED_BUILTIN, HIGH);
+  }
+
+  // if data is available in debug, send it to bluetooth 
+  if(SS_Debug.available())
+  {
+    Serial.write(SS_Debug.read());
+    //digitalWrite(LED_BUILTIN, LOW);
+  }
 }
 
 /***********************************************************************************************/
@@ -167,3 +265,82 @@ void PrintBytes(unsigned char *ucBuffer, int iBuflen)
      // Serial.Println(arrcMsg);
   }
 }
+
+/***********************************************************************************************/
+/*! 
+* \fn         :: isValidCmd()
+* \author     :: Vignesh S
+* \date       :: 05-DEC-2018
+* \brief      :: This function validates the received command and return true if it a valid 
+*                command else returns false, if a valid command is received, then the 
+*                corresponding command ID is returned through out_iCmdID parameter, similarly
+*                Invalid command ID error code is returned.
+* \param[in]  :: parrcCmd, iCmdLen 
+* \param[out] :: out_iCmdID
+* \return     :: true or false
+*/
+/***********************************************************************************************/
+bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
+{
+  char arrcMsg[32] = {0};
+
+  if((parrcCmd == NULL) || (out_iCmdID == NULL) || (iCmdLen <= 0))
+  {
+    return false;
+  }
+
+  if(StrnCmp(parrcCmd, CMD_RELAY_ON, iCmdLen) == true)
+  {
+    *out_iCmdID = CMD_RELAY_ON_ID;
+    return true;
+  }
+  else if (StrnCmp(parrcCmd, CMD_RELAY_OFF, iCmdLen) == true)
+  {
+    *out_iCmdID = CMD_RELAY_OFF_ID;
+    return true;
+  }
+  else if(StrnCmp(parrcCmd, CMD_START_TEST, iCmdLen) == true)
+  {
+    *out_iCmdID = CMD_START_TEST_ID;
+    return true;
+  }
+  else
+  {
+    // invalid command
+    sprintf(arrcMsg,"Ivld Cmd: %s", parrcCmd);
+    SS_Debug.println(arrcMsg);
+    *out_iCmdID = CMD_INVALID_CMD_ID;
+  }
+
+  return false;
+}
+
+/***********************************************************************************************/
+/*! 
+* \fn         :: StrnCmp()
+* \author     :: Vignesh S
+* \date       :: 05-DEC-2018
+* \brief      :: This function compares two strings, returns true if they are identical else
+*                false.  
+* \param[in]  :: pString1, pString2, iLen 
+* \return     :: true or false
+*/
+/***********************************************************************************************/
+bool StrnCmp(char *pString1, char *pString2, int iLen)
+{
+  if((pString1 == NULL) || (pString2 == NULL) || (iLen <= 0))
+  {
+    return false;
+  }
+
+  for(int iIndex = 0; iIndex < iLen; iIndex++)
+  {
+    if(pString1[iIndex] != pString2[iIndex])
+    {
+      return false;
+    }
+  }
+
+  return true;
+}
+
