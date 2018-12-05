@@ -29,6 +29,9 @@ int g_iRelayState = 0;
 #define RELAY           PIN_A0
 /***********************************************************************************************/
 
+#define MAX_DEBUG_MSG_SIZE                  32
+#define MAX_CMD_STRING_SIZE                 10
+
 #define SELF_TEST_COUNT                     0x01
 #define HC05_BUAD_RATE                      9600
 #define DEBUG_BUAD_RATE                     9600
@@ -99,8 +102,8 @@ void setup() {
 /***********************************************************************************************/
 void loop() {
 
-  char arrcCmd[10] = {0};
-  char arrcMsg[32] = {0};
+  char arrcCmd[MAX_CMD_STRING_SIZE] = {0};
+  char arrcMsg[MAX_DEBUG_MSG_SIZE]  = {0};
   int iIndex = 0;
   int iCmdID = 0;
 
@@ -127,43 +130,10 @@ void loop() {
     SS_Debug.println(arrcMsg);
   }
   
+  // validate the command
   if(isValidCmd(arrcCmd, iIndex, &iCmdID) == true)
   {
-    switch(iCmdID)
-    {
-      case CMD_RELAY_ON_ID:
-
-        // turn on relay
-        digitalWrite(RELAY, HIGH);
-        // set the relay state flag to on state
-        g_iRelayState = RELAY_STATE_ON;
-
-        sprintf(arrcMsg, "Turning Relay ON");
-        SS_Debug.println(arrcMsg);
-      break;
-
-      case CMD_RELAY_OFF_ID:
-
-        // turn off relay
-        digitalWrite(RELAY, LOW);
-        // set the relay state flag to off state
-        g_iRelayState = RELAY_STATE_OFF;
-
-        sprintf(arrcMsg, "Turning Relay OFF");
-        SS_Debug.println(arrcMsg);
-      break;
-
-      case CMD_START_TEST_ID:
-
-        sprintf(arrcMsg, "Performing Self Test");
-        SS_Debug.println(arrcMsg);
-        // perform self test
-        SelfTest(0x01);
-      break;
-
-      default:
-        ;// do nothing 
-    }
+    CmdProcess(iCmdID);
   }
   else
   {
@@ -250,7 +220,7 @@ void SelfTest(int iTestCount)
 void PrintBytes(unsigned char *ucBuffer, int iBuflen)
 {
   int iIndex = 0;
-  char arrcMsg[32] = {0};
+  char arrcMsg[MAX_DEBUG_MSG_SIZE] = {0};
 
   if(ucBuffer == NULL)
   {
@@ -282,7 +252,7 @@ void PrintBytes(unsigned char *ucBuffer, int iBuflen)
 /***********************************************************************************************/
 bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
 {
-  char arrcMsg[32] = {0};
+  char arrcMsg[MAX_DEBUG_MSG_SIZE] = {0};
 
   if((parrcCmd == NULL) || (out_iCmdID == NULL) || (iCmdLen <= 0))
   {
@@ -307,7 +277,7 @@ bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
   else
   {
     // invalid command
-    sprintf(arrcMsg,"Ivld Cmd: %s", parrcCmd);
+    sprintf(arrcMsg,"Invalid Cmd: %s", parrcCmd);
     SS_Debug.println(arrcMsg);
     *out_iCmdID = CMD_INVALID_CMD_ID;
   }
@@ -342,5 +312,56 @@ bool StrnCmp(char *pString1, char *pString2, int iLen)
   }
 
   return true;
+}
+
+/***********************************************************************************************/
+/*! 
+* \fn         :: CmdProcess()
+* \author     :: Vignesh S
+* \date       :: 05-DEC-2018
+* \brief      :: This function processes the recceived command and preforms corresponding task
+* \param[in]  :: iCmdID
+* \return     :: None
+*/
+/***********************************************************************************************/
+void CmdProcess(int iCmdID)
+{
+  char arrcMsg[MAX_DEBUG_MSG_SIZE] = {0};
+  
+  switch(iCmdID)
+  {
+    case CMD_RELAY_ON_ID:
+
+      // turn on relay
+      digitalWrite(RELAY, HIGH);
+      // set the relay state flag to on state
+      g_iRelayState = RELAY_STATE_ON;
+
+      sprintf(arrcMsg, "Turning Relay ON");
+      SS_Debug.println(arrcMsg);
+    break;
+
+    case CMD_RELAY_OFF_ID:
+
+      // turn off relay
+      digitalWrite(RELAY, LOW);
+      // set the relay state flag to off state
+      g_iRelayState = RELAY_STATE_OFF;
+
+      sprintf(arrcMsg, "Turning Relay OFF");
+      SS_Debug.println(arrcMsg);
+    break;
+
+    case CMD_START_TEST_ID:
+
+      sprintf(arrcMsg, "Performing Self Test");
+      SS_Debug.println(arrcMsg);
+      // perform self test
+      SelfTest(0x01);
+    break;
+
+    default:
+      ;// do nothing 
+  }
 }
 
