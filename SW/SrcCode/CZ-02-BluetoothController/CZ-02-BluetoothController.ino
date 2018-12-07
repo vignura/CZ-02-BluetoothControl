@@ -28,7 +28,7 @@
 
 /***********************************************************************************************/
 /* comment the below macro to disable debug prints */
-//#define PRINT_DEBUG
+#define PRINT_DEBUG
 
 #define MAX_DEBUG_MSG_SIZE                  128
 #define MAX_CMD_STRING_SIZE                 10
@@ -40,7 +40,7 @@
 
 /* bluetooth command Strings*/
 #define CMD_RELAY_ON                      "RlyOn"
-#define CMD_RELAY_ON_TIMER                "RlyOn " /* Rlyon hh:mm:ss */
+#define CMD_RELAY_ON_TIMER                "RlyOn " /* RlyOn hh:mm:ss */
 #define CMD_RELAY_OFF                     "RlyOff"
 #define CMD_START_TEST                    "StTest"
 
@@ -89,8 +89,11 @@ void setup() {
 
   // Serial port initialization
   Serial.begin(HC05_BUAD_RATE);
-  SS_Debug.begin(DEBUG_BUAD_RATE);
-
+  
+  #ifdef PRINT_DEBUG
+    SS_Debug.begin(DEBUG_BUAD_RATE);
+  #endif
+    
   // perform self test
   //SelfTest(SELF_TEST_COUNT);
 
@@ -442,3 +445,4 @@ int RecvCmd(char *pBuff, int iBuflen)
 
   return iIndex;
 }
+
