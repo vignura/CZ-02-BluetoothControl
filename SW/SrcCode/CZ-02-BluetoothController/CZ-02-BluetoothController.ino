@@ -28,9 +28,9 @@
 
 /***********************************************************************************************/
 /* comment the below macro to disable debug prints */
-#define PRINT_DEBUG
+//#define PRINT_DEBUG
 
-#define MAX_DEBUG_MSG_SIZE                  32
+#define MAX_DEBUG_MSG_SIZE                  128
 #define MAX_CMD_STRING_SIZE                 10
 
 #define SELF_TEST_COUNT                     0x01
@@ -39,27 +39,28 @@
 #define HC05_SERIAL_READ_DELAY_MS           0x02
 
 /* bluetooth command Strings*/
-#define CMD_RELAY_ON                      "RelayOn"
-#define CMD_RELAY_OFF                     "RelayOff"
-#define CMD_START_TEST                    "StartTest"
+#define CMD_RELAY_ON                      "RlyOn"
+#define CMD_RELAY_ON_TIMER                "RlyOn " /* Rlyon hh:mm:ss */
+#define CMD_RELAY_OFF                     "RlyOff"
+#define CMD_START_TEST                    "StTest"
 
 /* bluetooth command IDs */
 #define CMD_INVALID_CMD_ID                  -1
 #define CMD_RELAY_ON_ID                     0x01 
-#define CMD_RELAY_OFF_ID                    0x02
-#define CMD_START_TEST_ID                   0x03
-
-/* Relay states */
-#define RELAY_STATE_ON                      0x00
-#define RELAY_STATE_OFF                     0x01 
+#define CMD_RELAY_ON_TIMER_ID               0x02
+#define CMD_RELAY_OFF_ID                    0x03
+#define CMD_START_TEST_ID                   0x04
 
 /****************************************** globals ********************************************/
 
 SoftwareSerial SS_Debug(10, 11);
-int g_iRelayState = 0;
+Relay MotorRly(RELAY);
+
+#ifdef PRINT_DEBUG
+  char g_arrcMsg[MAX_DEBUG_MSG_SIZE] = {0};
+#endif
+
 unsigned long g_ulOnTimeSec = 0;
-unsigned long g_ulTimeSec = 0;
-char g_arrcMsg[MAX_DEBUG_MSG_SIZE] = {0};
 
 /***********************************************************************************************/
 /*! 
@@ -84,9 +85,7 @@ void setup() {
   pinMode(USR_LED_2, OUTPUT);
 
   // Relay initialization
-  pinMode(RELAY, OUTPUT);
-  digitalWrite(RELAY, LOW);
-  g_iRelayState = RELAY_STATE_OFF;
+  MotorRly.setState(RELAY_OFF);
 
   // Serial port initialization
   Serial.begin(HC05_BUAD_RATE);
@@ -119,9 +118,10 @@ void loop() {
   iReadBytes = RecvCmd(arrcCmd, MAX_CMD_STRING_SIZE); 
   if(iReadBytes > 0)
   {
-    // print to debug
-    sprintf(g_arrcMsg, "Received: [%d] %s", iReadBytes, arrcCmd);
-    SS_Debug.println(g_arrcMsg);
+    #ifdef PRINT_DEBUG
+      sprintf(g_arrcMsg, "Received: [%d] %s", iReadBytes, arrcCmd);
+      SS_Debug.println(g_arrcMsg);
+    #endif
 
     // validate the command
     if(isValidCmd(arrcCmd, iReadBytes, &iCmdID) == true)
@@ -135,20 +135,9 @@ void loop() {
     }
   }
 
-  // if Relay is on, then turn it off
-  if(g_iRelayState == RELAY_STATE_ON)
-  {
-    if(g_ulOnTimeSec >= g_ulTimeSec)
-    {
-      // clear the time counts
-      g_ulTimeSec = 0;
-      g_ulOnTimeSec = 0;
+  // run relay timer task
+  MotorRly.TimerTask();
 
-      // turn off the relay
-      digitalWrite(RELAY, LOW);
-      g_iRelayState = RELAY_STATE_OFF;
-    }
-  }
 }
 
 /***********************************************************************************************/
@@ -266,6 +255,11 @@ void PrintBytes(unsigned char *ucBuffer, int iBuflen)
 /***********************************************************************************************/
 bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
 {
+  int iHour = 0;
+  int iMin = 0;
+  int iSec = 0;
+  int iRetVal = 0;
+
   if((parrcCmd == NULL) || (out_iCmdID == NULL) || (iCmdLen <= 0))
   {
     return false;
@@ -274,6 +268,34 @@ bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
   if(StrnCmp(parrcCmd, CMD_RELAY_ON, iCmdLen) == true)
   {
     *out_iCmdID = CMD_RELAY_ON_ID;
+    return true;
+  }
+  else if (StrnCmp(parrcCmd, CMD_RELAY_ON_TIMER, strlen(CMD_RELAY_ON_TIMER)) == true)
+  {
+    iRetVal = sscanf(parrcCmd, CMD_RELAY_ON_TIMER "%d:%d:%d", &iHour, &iMin, &iSec);
+    if(iRetVal != 0x03)
+    {
+        // invalid command
+      #ifdef PRINT_DEBUG
+        sprintf(g_arrcMsg,"Invalid Pramater: %s", parrcCmd);
+        SS_Debug.println(g_arrcMsg);
+      #endif
+      *out_iCmdID = CMD_INVALID_CMD_ID;
+      
+      return false;
+    }
+    else
+    {
+      #ifdef PRINT_DEBUG
+        sprintf(g_arrcMsg,"Cmd: %s\nHour: %d\nMin: %d\nSec: %d", parrcCmd, iHour, iMin, isValidCmd);
+        SS_Debug.println(g_arrcMsg);
+      #endif
+
+      // set the global timer variable
+      g_ulOnTimeSec = (iHour * 3600UL) + (iMin * 60UL) + iSec;
+    }
+   
+   *out_iCmdID = CMD_RELAY_ON_TIMER_ID; 
     return true;
   }
   else if (StrnCmp(parrcCmd, CMD_RELAY_OFF, iCmdLen) == true)
@@ -317,7 +339,7 @@ bool StrnCmp(char *pString1, char *pString2, int iLen)
     return false;
   }
 
-  for(int iIndex = 0; iIndex < iLen; iIndex++)
+  for(int iIndex = 0; ((iIndex < iLen) && (pString1[iIndex] != NULL) && (pString2[iIndex] != NULL)); iIndex++)
   {
     if(pString1[iIndex] != pString2[iIndex])
     {
@@ -344,12 +366,32 @@ void CmdProcess(int iCmdID)
   {
     case CMD_RELAY_ON_ID:
       
-      SetRelayState(RELAY_STATE_ON);
+      #ifdef PRINT_DEBUG
+        sprintf(g_arrcMsg, "Turning Relay ON");
+        SS_Debug.println(g_arrcMsg);
+      #endif
+      
+      MotorRly.setState(RELAY_ON);
+    break;
+
+    case CMD_RELAY_ON_TIMER_ID:
+      
+      #ifdef PRINT_DEBUG
+        sprintf(g_arrcMsg, "Turning Relay ON for %d seconds", g_ulOnTimeSec);
+        SS_Debug.println(g_arrcMsg);
+      #endif
+      
+      MotorRly.setTimer(g_ulOnTimeSec);
     break;
 
     case CMD_RELAY_OFF_ID:
 
-      SetRelayState(RELAY_STATE_OFF);
+      #ifdef PRINT_DEBUG
+        sprintf(g_arrcMsg, "Turning Relay OFF");
+        SS_Debug.println(g_arrcMsg);
+      #endif
+
+      MotorRly.setState(RELAY_OFF);
     break;
 
     case CMD_START_TEST_ID:
@@ -400,52 +442,3 @@ int RecvCmd(char *pBuff, int iBuflen)
 
   return iIndex;
 }
-
-/***********************************************************************************************/
-/*! 
-* \fn         :: SetRelayState()
-* \author     :: Vignesh S
-* \date       :: 07-DEC-2018
-* \brief      :: This function turns relay on or off based on the iState parameter
-* \param[in]  :: iState
-* \return     :: None
-*/
-/***********************************************************************************************/
-void SetRelayState(int iState)
-{
-  switch(iState)
-  {
-    case RELAY_STATE_OFF:
-
-      // turn off the relay
-      digitalWrite(RELAY, LOW);
-      g_iRelayState = RELAY_STATE_OFF;
-
-      #ifdef PRINT_DEBUG
-        sprintf(g_arrcMsg, "Turning Relay OFF");
-        SS_Debug.println(g_arrcMsg);
-      #endif
-
-    break;
-
-    case RELAY_STATE_ON:
-
-      // turn off the relay
-      digitalWrite(RELAY, LOW);
-      g_iRelayState = RELAY_STATE_OFF;
-
-      #ifdef PRINT_DEBUG
-        sprintf(g_arrcMsg, "Turning Relay ON");
-        SS_Debug.println(g_arrcMsg);
-      #endif
-
-    break;
-
-    default:
-      #ifdef PRINT_DEBUG
-        sprintf(g_arrcMsg, "Error: Unknown relay state: %d", iState);
-        SS_Debug.println(g_arrcMsg);
-      #endif
-  }
-}
-
