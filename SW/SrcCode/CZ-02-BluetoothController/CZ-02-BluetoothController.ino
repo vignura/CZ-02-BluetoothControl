@@ -9,9 +9,7 @@
 /***********************************************************************************************/
 // headers
 #include <SoftwareSerial.h>
-
-SoftwareSerial SS_Debug(10, 11);
-int g_iRelayState = 0;
+#include <Relay.h>
 
 /*************************************** Pin Mappings ******************************************/
 // ground plane
@@ -27,7 +25,10 @@ int g_iRelayState = 0;
 
 // Relay 
 #define RELAY           PIN_A0
+
 /***********************************************************************************************/
+/* comment the below macro to disable debug prints */
+#define PRINT_DEBUG
 
 #define MAX_DEBUG_MSG_SIZE                  32
 #define MAX_CMD_STRING_SIZE                 10
@@ -51,6 +52,14 @@ int g_iRelayState = 0;
 /* Relay states */
 #define RELAY_STATE_ON                      0x00
 #define RELAY_STATE_OFF                     0x01 
+
+/****************************************** globals ********************************************/
+
+SoftwareSerial SS_Debug(10, 11);
+int g_iRelayState = 0;
+unsigned long g_ulOnTimeSec = 0;
+unsigned long g_ulTimeSec = 0;
+char g_arrcMsg[MAX_DEBUG_MSG_SIZE] = {0};
 
 /***********************************************************************************************/
 /*! 
@@ -103,41 +112,42 @@ void setup() {
 void loop() {
 
   char arrcCmd[MAX_CMD_STRING_SIZE] = {0};
-  char arrcMsg[MAX_DEBUG_MSG_SIZE]  = {0};
-  int iIndex = 0;
+  int iReadBytes = 0;
   int iCmdID = 0;
 
   // read data from HC-05 if available
-  while(iIndex < 10)
+  iReadBytes = RecvCmd(arrcCmd, MAX_CMD_STRING_SIZE); 
+  if(iReadBytes > 0)
   {
-    delay(HC05_SERIAL_READ_DELAY_MS);
-    
-    if(Serial.available())
+    // print to debug
+    sprintf(g_arrcMsg, "Received: [%d] %s", iReadBytes, arrcCmd);
+    SS_Debug.println(g_arrcMsg);
+
+    // validate the command
+    if(isValidCmd(arrcCmd, iReadBytes, &iCmdID) == true)
     {
-      arrcCmd[iIndex] = Serial.read();
-      iIndex++;
+      // if valid command is received, process it
+      CmdProcess(iCmdID);
     }
     else
     {
-      break;
+      // do nothing
     }
   }
-  
-  // print to debug if data is avialible
-  if(iIndex > 0)
+
+  // if Relay is on, then turn it off
+  if(g_iRelayState == RELAY_STATE_ON)
   {
-    sprintf(arrcMsg, "[%d] %s", iIndex, arrcCmd);
-    SS_Debug.println(arrcMsg);
-  }
-  
-  // validate the command
-  if(isValidCmd(arrcCmd, iIndex, &iCmdID) == true)
-  {
-    CmdProcess(iCmdID);
-  }
-  else
-  {
-    // do nothing
+    if(g_ulOnTimeSec >= g_ulTimeSec)
+    {
+      // clear the time counts
+      g_ulTimeSec = 0;
+      g_ulOnTimeSec = 0;
+
+      // turn off the relay
+      digitalWrite(RELAY, LOW);
+      g_iRelayState = RELAY_STATE_OFF;
+    }
   }
 }
 
@@ -186,6 +196,11 @@ void SelfTest(int iTestCount)
 {
   int iCount = 0;
 
+  #ifdef PRINT_DEBUG
+    sprintf(g_arrcMsg, "Performing Self Test..\nTest Count: %d", iTestCount);
+    SS_Debug.println(g_arrcMsg);
+  #endif
+
   for(iCount = 0; iCount < iTestCount; iCount++)
   {
     // turn on the two LEDs
@@ -220,7 +235,6 @@ void SelfTest(int iTestCount)
 void PrintBytes(unsigned char *ucBuffer, int iBuflen)
 {
   int iIndex = 0;
-  char arrcMsg[MAX_DEBUG_MSG_SIZE] = {0};
 
   if(ucBuffer == NULL)
   {
@@ -229,10 +243,10 @@ void PrintBytes(unsigned char *ucBuffer, int iBuflen)
 
   for(iIndex = 0; iIndex < iBuflen; iIndex++)
   {
-     sprintf(arrcMsg,"BY%0d: %#X[%c]", ucBuffer[iIndex]);
-     
-     // print arrcMsg to serial port
-     // Serial.Println(arrcMsg);
+    #ifdef PRINT_DEBUG
+      sprintf(g_arrcMsg,"BY%0d: %#X[%c]", ucBuffer[iIndex]);
+      SS_Debug.println(g_arrcMsg);
+    #endif
   }
 }
 
@@ -252,8 +266,6 @@ void PrintBytes(unsigned char *ucBuffer, int iBuflen)
 /***********************************************************************************************/
 bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
 {
-  char arrcMsg[MAX_DEBUG_MSG_SIZE] = {0};
-
   if((parrcCmd == NULL) || (out_iCmdID == NULL) || (iCmdLen <= 0))
   {
     return false;
@@ -277,8 +289,10 @@ bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
   else
   {
     // invalid command
-    sprintf(arrcMsg,"Invalid Cmd: %s", parrcCmd);
-    SS_Debug.println(arrcMsg);
+    #ifdef PRINT_DEBUG
+      sprintf(g_arrcMsg,"Invalid Cmd: %s", parrcCmd);
+      SS_Debug.println(g_arrcMsg);
+    #endif
     *out_iCmdID = CMD_INVALID_CMD_ID;
   }
 
@@ -325,43 +339,113 @@ bool StrnCmp(char *pString1, char *pString2, int iLen)
 */
 /***********************************************************************************************/
 void CmdProcess(int iCmdID)
-{
-  char arrcMsg[MAX_DEBUG_MSG_SIZE] = {0};
-  
+{ 
   switch(iCmdID)
   {
     case CMD_RELAY_ON_ID:
-
-      // turn on relay
-      digitalWrite(RELAY, HIGH);
-      // set the relay state flag to on state
-      g_iRelayState = RELAY_STATE_ON;
-
-      sprintf(arrcMsg, "Turning Relay ON");
-      SS_Debug.println(arrcMsg);
+      
+      SetRelayState(RELAY_STATE_ON);
     break;
 
     case CMD_RELAY_OFF_ID:
 
-      // turn off relay
-      digitalWrite(RELAY, LOW);
-      // set the relay state flag to off state
-      g_iRelayState = RELAY_STATE_OFF;
-
-      sprintf(arrcMsg, "Turning Relay OFF");
-      SS_Debug.println(arrcMsg);
+      SetRelayState(RELAY_STATE_OFF);
     break;
 
     case CMD_START_TEST_ID:
 
-      sprintf(arrcMsg, "Performing Self Test");
-      SS_Debug.println(arrcMsg);
       // perform self test
       SelfTest(0x01);
     break;
 
     default:
       ;// do nothing 
+  }
+}
+
+/***********************************************************************************************/
+/*! 
+* \fn         :: RecvCmd()
+* \author     :: Vignesh S
+* \date       :: 07-DEC-2018
+* \brief      :: This function cheks HC-05 serial port for received data and if data is available
+*                then reads it, the number of bytes read is returned.
+* \param[in]  :: pBuff, iBuflen
+* \return     :: iIndex
+*/
+/***********************************************************************************************/
+int RecvCmd(char *pBuff, int iBuflen)
+{
+  int iIndex = 0;
+
+  if(pBuff == NULL)
+  {
+    return -1;
+  }
+  
+  while(iIndex < iBuflen)
+  {
+    delay(HC05_SERIAL_READ_DELAY_MS);
+    
+    if(Serial.available())
+    {
+      pBuff[iIndex] = Serial.read();
+      iIndex++;
+    }
+    else
+    {
+      break;
+    }
+  }
+
+  return iIndex;
+}
+
+/***********************************************************************************************/
+/*! 
+* \fn         :: SetRelayState()
+* \author     :: Vignesh S
+* \date       :: 07-DEC-2018
+* \brief      :: This function turns relay on or off based on the iState parameter
+* \param[in]  :: iState
+* \return     :: None
+*/
+/***********************************************************************************************/
+void SetRelayState(int iState)
+{
+  switch(iState)
+  {
+    case RELAY_STATE_OFF:
+
+      // turn off the relay
+      digitalWrite(RELAY, LOW);
+      g_iRelayState = RELAY_STATE_OFF;
+
+      #ifdef PRINT_DEBUG
+        sprintf(g_arrcMsg, "Turning Relay OFF");
+        SS_Debug.println(g_arrcMsg);
+      #endif
+
+    break;
+
+    case RELAY_STATE_ON:
+
+      // turn off the relay
+      digitalWrite(RELAY, LOW);
+      g_iRelayState = RELAY_STATE_OFF;
+
+      #ifdef PRINT_DEBUG
+        sprintf(g_arrcMsg, "Turning Relay ON");
+        SS_Debug.println(g_arrcMsg);
+      #endif
+
+    break;
+
+    default:
+      #ifdef PRINT_DEBUG
+        sprintf(g_arrcMsg, "Error: Unknown relay state: %d", iState);
+        SS_Debug.println(g_arrcMsg);
+      #endif
   }
 }
 
