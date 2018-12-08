@@ -31,7 +31,7 @@
 #define PRINT_DEBUG
 
 #define MAX_DEBUG_MSG_SIZE                  128
-#define MAX_CMD_STRING_SIZE                 10
+#define MAX_CMD_STRING_SIZE                 32
 
 #define SELF_TEST_COUNT                     0x01
 #define HC05_BUAD_RATE                      9600
@@ -189,7 +189,7 @@ void SelfTest(int iTestCount)
   int iCount = 0;
 
   #ifdef PRINT_DEBUG
-    sprintf(g_arrcMsg, "Performing Self Test..\nTest Count: %d", iTestCount);
+    sprintf(g_arrcMsg, "Performing Self Test..\r\nTest Count: %d", iTestCount);
     SS_Debug.println(g_arrcMsg);
   #endif
 
@@ -197,7 +197,7 @@ void SelfTest(int iTestCount)
   {
     // turn on the two LEDs
     digitalWrite(USR_LED_1, HIGH);
-    digitalWrite(USR_LED_1, HIGH);
+    digitalWrite(USR_LED_2, HIGH);
     // turn on Relay
     digitalWrite(RELAY, HIGH);
 
@@ -205,7 +205,7 @@ void SelfTest(int iTestCount)
     
     // turn off the two LEDs
     digitalWrite(USR_LED_1, LOW);
-    digitalWrite(USR_LED_1, LOW);
+    digitalWrite(USR_LED_2, LOW);
     // turn off Relay
     digitalWrite(RELAY, LOW);
 
@@ -258,9 +258,9 @@ void PrintBytes(unsigned char *ucBuffer, int iBuflen)
 /***********************************************************************************************/
 bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
 {
-  int iHour = 0;
-  int iMin = 0;
-  int iSec = 0;
+  unsigned long ulHour = 0;
+  unsigned long ulMin = 0;
+  unsigned long ulSec = 0;
   int iRetVal = 0;
 
   if((parrcCmd == NULL) || (out_iCmdID == NULL) || (iCmdLen <= 0))
@@ -275,7 +275,7 @@ bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
   }
   else if (StrnCmp(parrcCmd, CMD_RELAY_ON_TIMER, strlen(CMD_RELAY_ON_TIMER)) == true)
   {
-    iRetVal = sscanf(parrcCmd, CMD_RELAY_ON_TIMER "%d:%d:%d", &iHour, &iMin, &iSec);
+    iRetVal = sscanf(parrcCmd, CMD_RELAY_ON_TIMER "%d:%d:%d", &ulHour, &ulMin, &ulSec);
     if(iRetVal != 0x03)
     {
         // invalid command
@@ -290,12 +290,12 @@ bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
     else
     {
       #ifdef PRINT_DEBUG
-        sprintf(g_arrcMsg,"Cmd: %s\nHour: %d\nMin: %d\nSec: %d", parrcCmd, iHour, iMin, isValidCmd);
+        sprintf(g_arrcMsg,"Cmd: %s\r\nHour: %ld\r\nMin: %ld\r\nSec: %ld", parrcCmd, ulHour, ulMin, ulSec);
         SS_Debug.println(g_arrcMsg);
       #endif
 
       // set the global timer variable
-      g_ulOnTimeSec = (iHour * 3600UL) + (iMin * 60UL) + iSec;
+      g_ulOnTimeSec = (ulHour * 3600UL) + (ulMin * 60UL) + ulSec;
     }
    
    *out_iCmdID = CMD_RELAY_ON_TIMER_ID; 
@@ -342,7 +342,7 @@ bool StrnCmp(char *pString1, char *pString2, int iLen)
     return false;
   }
 
-  for(int iIndex = 0; ((iIndex < iLen) && (pString1[iIndex] != NULL) && (pString2[iIndex] != NULL)); iIndex++)
+  for(int iIndex = 0; (iIndex < iLen); iIndex++)
   {
     if(pString1[iIndex] != pString2[iIndex])
     {
@@ -380,7 +380,7 @@ void CmdProcess(int iCmdID)
     case CMD_RELAY_ON_TIMER_ID:
       
       #ifdef PRINT_DEBUG
-        sprintf(g_arrcMsg, "Turning Relay ON for %d seconds", g_ulOnTimeSec);
+        sprintf(g_arrcMsg, "Turning Relay ON for %ld seconds", g_ulOnTimeSec);
         SS_Debug.println(g_arrcMsg);
       #endif
       
@@ -445,4 +445,3 @@ int RecvCmd(char *pBuff, int iBuflen)
 
   return iIndex;
 }
-
