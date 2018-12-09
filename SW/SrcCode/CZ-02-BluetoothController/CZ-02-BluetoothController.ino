@@ -54,7 +54,8 @@
 /****************************************** globals ********************************************/
 
 SoftwareSerial SS_Debug(10, 11);
-Relay MotorRly(RELAY);
+/* Set the relay to active low */
+Relay MotorRly(RELAY, true);
 
 #ifdef PRINT_DEBUG
   char g_arrcMsg[MAX_DEBUG_MSG_SIZE] = {0};
@@ -199,15 +200,15 @@ void SelfTest(int iTestCount)
     digitalWrite(USR_LED_1, HIGH);
     digitalWrite(USR_LED_2, HIGH);
     // turn on Relay
-    digitalWrite(RELAY, HIGH);
+    MotorRly.setState(RELAY_ON);    
 
-    delay(2000);
+    delay(10000);
     
     // turn off the two LEDs
     digitalWrite(USR_LED_1, LOW);
     digitalWrite(USR_LED_2, LOW);
     // turn off Relay
-    digitalWrite(RELAY, LOW);
+    MotorRly.setState(RELAY_OFF);
 
     delay(500);   
   }
