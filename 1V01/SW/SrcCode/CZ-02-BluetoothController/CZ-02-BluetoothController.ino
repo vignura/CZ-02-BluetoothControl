@@ -52,8 +52,8 @@
 #define CMD_START_TEST_ID                   0x04
 
 /****************************************** globals ********************************************/
-
-SoftwareSerial SS_Debug(10, 11);
+/* SoftwareSerial (RX, TX) */
+SoftwareSerial SS_Bluetooth(3, 4);
 /* Set the relay to active low */
 Relay MotorRly(RELAY, true);
 
@@ -89,11 +89,11 @@ void setup() {
   MotorRly.setState(RELAY_OFF);
 
   // Serial port initialization
-  Serial.begin(HC05_BUAD_RATE);
-  
   #ifdef PRINT_DEBUG
-    SS_Debug.begin(DEBUG_BUAD_RATE);
+    Serial.begin( DEBUG_BUAD_RATE);
   #endif
+  
+  SS_Bluetooth.begin(HC05_BUAD_RATE);
     
   // perform self test
   //SelfTest(SELF_TEST_COUNT);
@@ -124,7 +124,7 @@ void loop() {
   {
     #ifdef PRINT_DEBUG
       sprintf(g_arrcMsg, "Received: [%d] %s", iReadBytes, arrcCmd);
-      SS_Debug.println(g_arrcMsg);
+      Serial.println(g_arrcMsg);
     #endif
 
     // validate the command
@@ -158,18 +158,18 @@ void loop() {
 void BuletoothTerminal()
 {
   // if data is available in bluetooth, send it to debug
-  if(Serial.available())
+  if(SS_Bluetooth.available())
   {
-    SS_Debug.write(Serial.read());
+    Serial.write(SS_Bluetooth.read());
     // echo
-    //Serial.write(Serial.read());
+    //SS_Bluetooth.write(SS_Bluetooth.read());
     //digitalWrite(LED_BUILTIN, HIGH);
   }
 
   // if data is available in debug, send it to bluetooth 
-  if(SS_Debug.available())
+  if(Serial.available())
   {
-    Serial.write(SS_Debug.read());
+    SS_Bluetooth.write(Serial.read());
     //digitalWrite(LED_BUILTIN, LOW);
   }
 }
@@ -191,7 +191,7 @@ void SelfTest(int iTestCount)
 
   #ifdef PRINT_DEBUG
     sprintf(g_arrcMsg, "Performing Self Test..\r\nTest Count: %d", iTestCount);
-    SS_Debug.println(g_arrcMsg);
+    Serial.println(g_arrcMsg);
   #endif
 
   for(iCount = 0; iCount < iTestCount; iCount++)
@@ -238,7 +238,7 @@ void PrintBytes(unsigned char *ucBuffer, int iBuflen)
   {
     #ifdef PRINT_DEBUG
       sprintf(g_arrcMsg,"BY%0d: %#X[%c]", ucBuffer[iIndex]);
-      SS_Debug.println(g_arrcMsg);
+      Serial.println(g_arrcMsg);
     #endif
   }
 }
@@ -282,7 +282,7 @@ bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
         // invalid command
       #ifdef PRINT_DEBUG
         sprintf(g_arrcMsg,"Invalid Pramater: %s", parrcCmd);
-        SS_Debug.println(g_arrcMsg);
+        Serial.println(g_arrcMsg);
       #endif
       *out_iCmdID = CMD_INVALID_CMD_ID;
       
@@ -292,7 +292,7 @@ bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
     {
       #ifdef PRINT_DEBUG
         sprintf(g_arrcMsg,"Cmd: %s\r\nHour: %ld\r\nMin: %ld\r\nSec: %ld", parrcCmd, ulHour, ulMin, ulSec);
-        SS_Debug.println(g_arrcMsg);
+        Serial.println(g_arrcMsg);
       #endif
 
       // set the global timer variable
@@ -317,7 +317,7 @@ bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
     // invalid command
     #ifdef PRINT_DEBUG
       sprintf(g_arrcMsg,"Invalid Cmd: %s", parrcCmd);
-      SS_Debug.println(g_arrcMsg);
+      Serial.println(g_arrcMsg);
     #endif
     *out_iCmdID = CMD_INVALID_CMD_ID;
   }
@@ -372,7 +372,7 @@ void CmdProcess(int iCmdID)
       
       #ifdef PRINT_DEBUG
         sprintf(g_arrcMsg, "Turning Relay ON");
-        SS_Debug.println(g_arrcMsg);
+        Serial.println(g_arrcMsg);
       #endif
       
       MotorRly.setState(RELAY_ON);
@@ -382,7 +382,7 @@ void CmdProcess(int iCmdID)
       
       #ifdef PRINT_DEBUG
         sprintf(g_arrcMsg, "Turning Relay ON for %ld seconds", g_ulOnTimeSec);
-        SS_Debug.println(g_arrcMsg);
+        Serial.println(g_arrcMsg);
       #endif
       
       MotorRly.setTimer(g_ulOnTimeSec);
@@ -392,7 +392,7 @@ void CmdProcess(int iCmdID)
 
       #ifdef PRINT_DEBUG
         sprintf(g_arrcMsg, "Turning Relay OFF");
-        SS_Debug.println(g_arrcMsg);
+        Serial.println(g_arrcMsg);
       #endif
 
       MotorRly.setState(RELAY_OFF);
@@ -433,9 +433,9 @@ int RecvCmd(char *pBuff, int iBuflen)
   {
     delay(HC05_SERIAL_READ_DELAY_MS);
     
-    if(Serial.available())
+    if(SS_Bluetooth.available())
     {
-      pBuff[iIndex] = Serial.read();
+      pBuff[iIndex] = SS_Bluetooth.read();
       iIndex++;
     }
     else
