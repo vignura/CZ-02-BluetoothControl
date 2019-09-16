@@ -33,6 +33,9 @@
 /* comment the below macro to disable debug prints */
 #define PRINT_DEBUG
 
+/* comment the below macro to disable Bluetooth Response messages */
+#define SEND_BTRES
+
 #define MAX_DEBUG_MSG_SIZE                  128
 #define MAX_CMD_STRING_SIZE                 32
 
@@ -46,6 +49,12 @@
 #define CMD_RELAY_ON_TIMER                "RlyOn " /* RlyOn hh:mm:ss */
 #define CMD_RELAY_OFF                     "RlyOff"
 #define CMD_START_TEST                    "StTest"
+
+/* bluetooth response Strings*/
+#define RES_RELAY_ON                      "RlyOn"
+#define RES_RELAY_OFF                     "RlyOff"
+#define RES_START_TEST                    "StTest"
+#define RES_EMG_STOP                      "EmgStop"
 
 /* bluetooth command IDs */
 #define CMD_INVALID_CMD_ID                  -1
@@ -67,6 +76,10 @@ Relay MotorRly(RELAY, true);
 
 #ifdef PRINT_DEBUG
   char g_arrcMsg[MAX_DEBUG_MSG_SIZE] = {0};
+#endif
+
+#ifdef SEND_BTRES
+  char g_arrcBTMsg[MAX_CMD_STRING_SIZE] = {0};
 #endif
 
 unsigned long g_ulOnTimeSec = 0;
@@ -141,6 +154,11 @@ void loop() {
 
     // turn off the relay
     CmdProcess(CMD_RELAY_OFF);
+
+    #ifdef SEND_BTRES
+      sprintf(g_arrcBTMsg, "%s", RES_EMG_STOP);
+      SS_Bluetooth.println(g_arrcBTMsg);
+    #endif
   }
 
   // read data from HC-05 if available
