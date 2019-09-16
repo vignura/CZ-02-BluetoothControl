@@ -49,6 +49,7 @@
 #define CMD_RELAY_ON_TIMER                "RlyOn " /* RlyOn hh:mm:ss */
 #define CMD_RELAY_OFF                     "RlyOff"
 #define CMD_START_TEST                    "StTest"
+#define CMD_CHANGE_PWD                    "ChPwd" /*ChPwd 0000 */
 
 /* bluetooth response Strings*/
 #define RES_RELAY_ON                      "RlyOn"
@@ -62,6 +63,7 @@
 #define CMD_RELAY_ON_TIMER_ID               0x02
 #define CMD_RELAY_OFF_ID                    0x03
 #define CMD_START_TEST_ID                   0x04
+#define CMD_CHANGE_PWD_ID                   0x05
 
 /* Emergency stop Interrupt states */
 #define EMG_STOP_INT_STATE_CLEAR            0x00
@@ -84,6 +86,7 @@ Relay MotorRly(RELAY, true);
 
 unsigned long g_ulOnTimeSec = 0;
 volatile int g_viEmgStopInt = 0;
+int g_iPwd = 0;
 
 /***********************************************************************************************/
 /*! 
@@ -106,6 +109,10 @@ void setup() {
   // LED initialization
   pinMode(USR_LED_1, OUTPUT);
   pinMode(USR_LED_2, OUTPUT);
+
+  // set the HC-05 Enable as output and set the state to LOW
+  pinMode(HC05_EN, OUTPUT);
+  digitalWrite(HC05_EN, LOW);
 
   // Relay initialization
   MotorRly.setState(RELAY_OFF);
@@ -306,6 +313,7 @@ bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
   unsigned long ulMin = 0;
   unsigned long ulSec = 0;
   int iRetVal = 0;
+  int iPwd = 0;
 
   if((parrcCmd == NULL) || (out_iCmdID == NULL) || (iCmdLen <= 0))
   {
@@ -354,6 +362,31 @@ bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
   {
     *out_iCmdID = CMD_START_TEST_ID;
     return true;
+  }
+  else if(StrnCmp(parrcCmd, CMD_CHANGE_PWD, iCmdLen) == true)
+  {
+    iRetVal = sscanf(parrcCmd, CMD_CHANGE_PWD "%d", &iPwd);
+    if(iRetVal != 0x01)
+    {
+      // invalid command
+      #ifdef PRINT_DEBUG
+        sprintf(g_arrcMsg,"Invalid Pramater: %s", parrcCmd);
+        Serial.println(g_arrcMsg);
+      #endif
+
+      *out_iCmdID = CMD_INVALID_CMD_ID;
+      return false;
+    }
+    else
+    {
+      #ifdef PRINT_DEBUG
+        sprintf(g_arrcMsg,"Cmd: %s\r\nPwd: %d", parrcCmd, iPwd);
+        Serial.println(g_arrcMsg);
+      #endif
+
+      *out_iCmdID = CMD_CHANGE_PWD_ID;
+      return true;
+    }
   }
   else
   {
@@ -409,6 +442,7 @@ bool StrnCmp(char *pString1, char *pString2, int iLen)
 /***********************************************************************************************/
 void CmdProcess(int iCmdID)
 { 
+  int iRetVal = 0;
   switch(iCmdID)
   {
     case CMD_RELAY_ON_ID:
@@ -445,6 +479,19 @@ void CmdProcess(int iCmdID)
 
       // perform self test
       SelfTest(0x01);
+    break;
+
+    case CMD_CHANGE_PWD_ID:
+
+      // change Password
+      iRetVal = HC05_ChangePwd(g_iPwd);
+      if(iRetVal != 0)
+      {
+        #ifdef PRINT_DEBUG
+          sprintf(g_arrcMsg,"ERROR: Failed to change Password..!");
+          Serial.println(g_arrcMsg);
+        #endif
+      }
     break;
 
     default:
@@ -506,3 +553,67 @@ void EmgStopInterrupt()
   g_viEmgStopInt = EMG_STOP_INT_STATE_SET;
 }
 
+/***********************************************************************************************/
+/*! 
+* \fn         :: HC05_ChangePwd()
+* \author     :: Vignesh S
+* \date       :: 16-SEP-2019
+* \brief      :: This function change the bluetooth paring password of the HC-05 modlue by 
+*                switching the modlue to AT mode.
+* \param[in]  :: iPwd
+* \return     :: iRetVal
+*/
+/***********************************************************************************************/
+int HC05_ChangePwd(int iPwd)
+{
+  char arrcCmd[MAX_CMD_STRING_SIZE] = {0};
+  int iRetVal = 0;
+  int iReadBytes = 0;
+
+  // validate the input 
+  if((iPwd < 0) || (iPwd > 9999))
+  {
+    return -1;
+  }
+
+  // switch the bluetooth modlue into AT mode
+  digitalWrite(HC05_EN, HIGH);
+  delay(10);
+
+  // send change password command
+  sprintf(g_arrcBTMsg, "AT+PSWD=%04d\r\n", iPwd);
+
+  #ifdef PRINT_DEBUG
+    sprintf(g_arrcMsg, "Changing Password to: %d", iPwd);    
+    Serial.println(g_arrcMsg);
+  #endif
+
+  SS_Bluetooth.write(g_arrcBTMsg);
+
+  // verify response
+  delay(10);
+  iReadBytes = RecvCmd(arrcCmd, MAX_CMD_STRING_SIZE); 
+  if(iReadBytes > 0)
+  {
+    if(StrnCmp(arrcCmd, "OK", iReadBytes) == true)
+    {
+      #ifdef PRINT_DEBUG
+        sprintf(g_arrcMsg, "Changing Password Failed\nInvalid Response: %s", arrcCmd);    
+        Serial.println(g_arrcMsg);
+      #endif
+    }
+    else
+    {
+     #ifdef PRINT_DEBUG
+        sprintf(g_arrcMsg, "Changing Password success");    
+        Serial.println(g_arrcMsg);
+      #endif 
+    }
+  }
+
+  // switch the bluetooth modlue back to normal mode
+  digitalWrite(HC05_EN, LOW);
+  delay(10);
+
+  return iRetVal;
+}
