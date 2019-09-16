@@ -26,6 +26,9 @@
 // Relay 
 #define RELAY           PIN_A0
 
+// Emergency Stop 
+#define EMG_STOP        4
+
 /***********************************************************************************************/
 /* comment the below macro to disable debug prints */
 #define PRINT_DEBUG
@@ -51,9 +54,14 @@
 #define CMD_RELAY_OFF_ID                    0x03
 #define CMD_START_TEST_ID                   0x04
 
+/* Emergency stop Interrupt states */
+#define EMG_STOP_INT_STATE_CLEAR            0x00
+#define EMG_STOP_INT_STATE_SET              0x01
+
 /****************************************** globals ********************************************/
 /* SoftwareSerial (RX, TX) */
 SoftwareSerial SS_Bluetooth(3, 4);
+
 /* Set the relay to active low */
 Relay MotorRly(RELAY, true);
 
@@ -62,6 +70,7 @@ Relay MotorRly(RELAY, true);
 #endif
 
 unsigned long g_ulOnTimeSec = 0;
+volatile int g_viEmgStopInt = 0;
 
 /***********************************************************************************************/
 /*! 
@@ -94,6 +103,12 @@ void setup() {
   #endif
   
   SS_Bluetooth.begin(HC05_BUAD_RATE);
+
+  /* set the Emergency stop pin to input pullup */
+  pinMode(EMG_STOP, INPUT_PULLUP);
+
+  // Attach interrupt for Emergency stop.
+  attachInterrupt(digitalPinToInterrupt(EMG_STOP), EmgStopInterrupt, FALLING);
     
   // perform self test
   //SelfTest(SELF_TEST_COUNT);
@@ -117,6 +132,16 @@ void loop() {
   char arrcCmd[MAX_CMD_STRING_SIZE] = {0};
   int iReadBytes = 0;
   int iCmdID = 0;
+
+  // check for Emergency stop interrupt
+  if(g_viEmgStopInt == EMG_STOP_INT_STATE_SET)
+  {
+    // clear the interrupt
+    g_viEmgStopInt = EMG_STOP_INT_STATE_CLEAR;
+
+    // turn off the relay
+    CmdProcess(CMD_RELAY_OFF);
+  }
 
   // read data from HC-05 if available
   iReadBytes = RecvCmd(arrcCmd, MAX_CMD_STRING_SIZE); 
@@ -446,3 +471,20 @@ int RecvCmd(char *pBuff, int iBuflen)
 
   return iIndex;
 }
+
+/***********************************************************************************************/
+/*! 
+* \fn         :: EmgStopInterrupt()
+* \author     :: Vignesh S
+* \date       :: 16-SEP-2019
+* \brief      :: This function handles the Emergency Stop Interrupt and updates the global flag
+* \param[in]  :: None
+* \return     :: None
+*/
+/***********************************************************************************************/
+void EmgStopInterrupt()
+{
+  /* set the global flag */
+  g_viEmgStopInt = EMG_STOP_INT_STATE_SET;
+}
+
