@@ -1,4 +1,4 @@
-  /***********************************************************************************************/
+/***********************************************************************************************/
 /*
  *  \file       : CZ-02-BluetoothController.ino
  *  \date       : 02-DEC-2018 
@@ -27,7 +27,7 @@
 #define RELAY           PIN_A0
 
 // Emergency Stop 
-#define EMG_STOP        4
+#define EMG_STOP        2
 
 /***********************************************************************************************/
 /* comment the below macro to disable debug prints */
@@ -73,8 +73,8 @@
 /* SoftwareSerial (RX, TX) */
 SoftwareSerial SS_Bluetooth(3, 4);
 
-/* Set the relay to active low */
-Relay MotorRly(RELAY, true);
+/* Set the relay to active high */
+Relay MotorRly(RELAY, false);
 
 #ifdef PRINT_DEBUG
   char g_arrcMsg[MAX_DEBUG_MSG_SIZE] = {0};
@@ -111,15 +111,15 @@ void setup() {
   pinMode(USR_LED_2, OUTPUT);
 
   // set the HC-05 Enable as output and set the state to LOW
-  pinMode(HC05_EN, OUTPUT);
-  digitalWrite(HC05_EN, LOW);
+  //pinMode(HC05_EN, OUTPUT);
+  //digitalWrite(HC05_EN, LOW);
 
   // Relay initialization
   MotorRly.setState(RELAY_OFF);
 
   // Serial port initialization
   #ifdef PRINT_DEBUG
-    Serial.begin( DEBUG_BUAD_RATE);
+    Serial.begin(DEBUG_BUAD_RATE);
   #endif
   
   SS_Bluetooth.begin(HC05_BUAD_RATE);
@@ -152,6 +152,7 @@ void loop() {
   char arrcCmd[MAX_CMD_STRING_SIZE] = {0};
   int iReadBytes = 0;
   int iCmdID = 0;
+  int iEmgStopState = 0;
 
   // check for Emergency stop interrupt
   if(g_viEmgStopInt == EMG_STOP_INT_STATE_SET)
@@ -160,11 +161,28 @@ void loop() {
     g_viEmgStopInt = EMG_STOP_INT_STATE_CLEAR;
 
     // turn off the relay
-    CmdProcess(CMD_RELAY_OFF);
+    CmdProcess(CMD_RELAY_OFF_ID);
 
     #ifdef SEND_BTRES
       sprintf(g_arrcBTMsg, "%s", RES_EMG_STOP);
       SS_Bluetooth.println(g_arrcBTMsg);
+    #endif
+
+    #ifdef PRINT_DEBUG
+        sprintf(g_arrcMsg, "%s", RES_EMG_STOP);
+        Serial.println(g_arrcMsg);
+    #endif
+  }
+  else
+  {
+    #if 0
+      iEmgStopState = digitalRead(EMG_STOP);
+      #ifdef PRINT_DEBUG
+        sprintf(g_arrcMsg, "Emg Stop: %s", (iEmgStopState == 0) ? "LOW": "HIGH");
+        Serial.println(g_arrcMsg);
+      #endif
+  
+      delay(1000);
     #endif
   }
 
