@@ -45,7 +45,6 @@
 #define HC05_SERIAL_READ_DELAY_MS           0x02
 
 /* bluetooth command Strings*/
-#define CMD_RELAY_ON                      "RlyOn"
 #define CMD_RELAY_ON_TIMER                "RlyOn " /* RlyOn hh:mm:ss */
 #define CMD_RELAY_OFF                     "RlyOff"
 #define CMD_START_TEST                    "StTest"
@@ -59,11 +58,10 @@
 
 /* bluetooth command IDs */
 #define CMD_INVALID_CMD_ID                  -1
-#define CMD_RELAY_ON_ID                     0x01 
-#define CMD_RELAY_ON_TIMER_ID               0x02
-#define CMD_RELAY_OFF_ID                    0x03
-#define CMD_START_TEST_ID                   0x04
-#define CMD_CHANGE_PWD_ID                   0x05
+#define CMD_RELAY_ON_TIMER_ID               0x01
+#define CMD_RELAY_OFF_ID                    0x02
+#define CMD_START_TEST_ID                   0x03
+#define CMD_CHANGE_PWD_ID                   0x04
 
 /* Emergency stop Interrupt states */
 #define EMG_STOP_INT_STATE_CLEAR            0x00
@@ -338,12 +336,7 @@ bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
     return false;
   }
 
-  if(StrnCmp(parrcCmd, CMD_RELAY_ON, iCmdLen) == true)
-  {
-    *out_iCmdID = CMD_RELAY_ON_ID;
-    return true;
-  }
-  else if (StrnCmp(parrcCmd, CMD_RELAY_ON_TIMER, strlen(CMD_RELAY_ON_TIMER)) == true)
+  if (StrnCmp(parrcCmd, CMD_RELAY_ON_TIMER, strlen(CMD_RELAY_ON_TIMER)) == true)
   {
     iRetVal = sscanf(parrcCmd, CMD_RELAY_ON_TIMER "%d:%d:%d", &ulHour, &ulMin, &ulSec);
     if(iRetVal != 0x03)
@@ -463,16 +456,6 @@ void CmdProcess(int iCmdID)
   int iRetVal = 0;
   switch(iCmdID)
   {
-    case CMD_RELAY_ON_ID:
-      
-      #ifdef PRINT_DEBUG
-        sprintf(g_arrcMsg, "Turning Relay ON");
-        Serial.println(g_arrcMsg);
-      #endif
-      
-      MotorRly.setState(RELAY_ON);
-    break;
-
     case CMD_RELAY_ON_TIMER_ID:
       
       #ifdef PRINT_DEBUG
