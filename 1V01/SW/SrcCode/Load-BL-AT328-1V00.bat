@@ -1,0 +1,1 @@
+"C:\Program Files (x86)\Arduino\hardware\tools\avr/bin/avrdude" -C"C:\Program Files (x86)\Arduino\hardware\tools\avr/etc/avrdude.conf" -F -v -patmega328 -cstk500v1 -PCOM11 -b19200 -Uflash:w:"C:\Program Files (x86)\Arduino\hardware\arduino\avr/bootloaders/optiboot/optiboot_atmega328.hex":i -Ulock:w:0x0F:m 
