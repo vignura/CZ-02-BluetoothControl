@@ -45,10 +45,10 @@
 #define HC05_SERIAL_READ_DELAY_MS           0x02
 
 /* bluetooth command Strings*/
-#define CMD_RELAY_ON_TIMER                "RlyOn " /* RlyOn hh:mm:ss */
-#define CMD_RELAY_OFF                     "RlyOff"
-#define CMD_START_TEST                    "StTest"
-#define CMD_CHANGE_PWD                    "ChPwd" /*ChPwd 0000 */
+#define CMD_STR_RELAY_ON_TIMER            "RlyOn " /* RlyOn hh:mm:ss */
+#define CMD_STR_RELAY_OFF                 "RlyOff"
+#define CMD_STR_START_TEST                "StTest"
+#define CMD_STR_CHANGE_PWD                "ChPwd" /*ChPwd 0000 */
 
 /* bluetooth response Strings*/
 #define RES_RELAY_ON                      "RlyOn"
@@ -58,10 +58,10 @@
 
 /* bluetooth command IDs */
 #define CMD_INVALID_CMD_ID                  -1
-#define CMD_RELAY_ON_TIMER_ID               0x01
-#define CMD_RELAY_OFF_ID                    0x02
-#define CMD_START_TEST_ID                   0x03
-#define CMD_CHANGE_PWD_ID                   0x04
+#define CMD_STR_RELAY_ON_TIMER_ID               0x01
+#define CMD_STR_RELAY_OFF_ID                    0x02
+#define CMD_STR_START_TEST_ID                   0x03
+#define CMD_STR_CHANGE_PWD_ID                   0x04
 
 /* Emergency stop Interrupt states */
 #define EMG_STOP_INT_STATE_CLEAR            0x00
@@ -126,10 +126,10 @@ void setup() {
   pinMode(EMG_STOP, INPUT_PULLUP);
 
   // Attach interrupt for Emergency stop.
-  attachInterrupt(digitalPinToInterrupt(EMG_STOP), EmgStopInterrupt, FALLING);
+  // attachInterrupt(digitalPinToInterrupt(EMG_STOP), EmgStopInterrupt, FALLING);
     
   // perform self test
-  //SelfTest(SELF_TEST_COUNT);
+  SelfTest(SELF_TEST_COUNT);
 
 }
 
@@ -159,7 +159,7 @@ void loop() {
     g_viEmgStopInt = EMG_STOP_INT_STATE_CLEAR;
 
     // turn off the relay
-    CmdProcess(CMD_RELAY_OFF_ID);
+    CmdProcess(CMD_STR_RELAY_OFF_ID, g_arrcBTMsg);
 
     #ifdef SEND_BTRES
       sprintf(g_arrcBTMsg, "%s", RES_EMG_STOP);
@@ -197,7 +197,11 @@ void loop() {
     if(isValidCmd(arrcCmd, iReadBytes, &iCmdID) == true)
     {
       // if valid command is received, process it
-      CmdProcess(iCmdID);
+      CmdProcess(iCmdID, g_arrcBTMsg);
+
+      #ifdef SEND_BTRES
+        SS_Bluetooth.println(g_arrcBTMsg);
+      #endif
     }
     else
     {
@@ -268,7 +272,7 @@ void SelfTest(int iTestCount)
     // turn on Relay
     MotorRly.setState(RELAY_ON);    
 
-    delay(10000);
+    delay(5000);
     
     // turn off the two LEDs
     digitalWrite(USR_LED_1, LOW);
@@ -276,7 +280,7 @@ void SelfTest(int iTestCount)
     // turn off Relay
     MotorRly.setState(RELAY_OFF);
 
-    delay(500);   
+    delay(100);   
   }
 }
 
@@ -336,9 +340,9 @@ bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
     return false;
   }
 
-  if (StrnCmp(parrcCmd, CMD_RELAY_ON_TIMER, strlen(CMD_RELAY_ON_TIMER)) == true)
+  if (StrnCmp(parrcCmd, CMD_STR_RELAY_ON_TIMER, strlen(CMD_STR_RELAY_ON_TIMER)) == true)
   {
-    iRetVal = sscanf(parrcCmd, CMD_RELAY_ON_TIMER "%d:%d:%d", &ulHour, &ulMin, &ulSec);
+    iRetVal = sscanf(parrcCmd, CMD_STR_RELAY_ON_TIMER "%d:%d:%d", &ulHour, &ulMin, &ulSec);
     if(iRetVal != 0x03)
     {
         // invalid command
@@ -361,22 +365,22 @@ bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
       g_ulOnTimeSec = (ulHour * 3600UL) + (ulMin * 60UL) + ulSec;
     }
    
-   *out_iCmdID = CMD_RELAY_ON_TIMER_ID; 
+   *out_iCmdID = CMD_STR_RELAY_ON_TIMER_ID; 
     return true;
   }
-  else if (StrnCmp(parrcCmd, CMD_RELAY_OFF, iCmdLen) == true)
+  else if (StrnCmp(parrcCmd, CMD_STR_RELAY_OFF, iCmdLen) == true)
   {
-    *out_iCmdID = CMD_RELAY_OFF_ID;
+    *out_iCmdID = CMD_STR_RELAY_OFF_ID;
     return true;
   }
-  else if(StrnCmp(parrcCmd, CMD_START_TEST, iCmdLen) == true)
+  else if(StrnCmp(parrcCmd, CMD_STR_START_TEST, iCmdLen) == true)
   {
-    *out_iCmdID = CMD_START_TEST_ID;
+    *out_iCmdID = CMD_STR_START_TEST_ID;
     return true;
   }
-  else if(StrnCmp(parrcCmd, CMD_CHANGE_PWD, iCmdLen) == true)
+  else if(StrnCmp(parrcCmd, CMD_STR_CHANGE_PWD, iCmdLen) == true)
   {
-    iRetVal = sscanf(parrcCmd, CMD_CHANGE_PWD "%d", &iPwd);
+    iRetVal = sscanf(parrcCmd, CMD_STR_CHANGE_PWD "%d", &iPwd);
     if(iRetVal != 0x01)
     {
       // invalid command
@@ -395,7 +399,7 @@ bool isValidCmd(char *parrcCmd, int iCmdLen, int *out_iCmdID)
         Serial.println(g_arrcMsg);
       #endif
 
-      *out_iCmdID = CMD_CHANGE_PWD_ID;
+      *out_iCmdID = CMD_STR_CHANGE_PWD_ID;
       return true;
     }
   }
@@ -448,16 +452,25 @@ bool StrnCmp(char *pString1, char *pString2, int iLen)
 * \date       :: 05-DEC-2018
 * \brief      :: This function processes the recceived command and preforms corresponding task
 * \param[in]  :: iCmdID
+* \param[out] :: ipResponse
 * \return     :: None
 */
 /***********************************************************************************************/
-void CmdProcess(int iCmdID)
+void CmdProcess(int iCmdID, char *pResponse)
 { 
   int iRetVal = 0;
+
+  if(pResponse == NULL)
+  {
+    return;
+  }
+
   switch(iCmdID)
   {
-    case CMD_RELAY_ON_TIMER_ID:
+    case CMD_STR_RELAY_ON_TIMER_ID:
       
+      sprintf(pResponse, "%s", CMD_STR_RELAY_ON_TIMER);
+
       #ifdef PRINT_DEBUG
         sprintf(g_arrcMsg, "Turning Relay ON for %ld seconds", g_ulOnTimeSec);
         Serial.println(g_arrcMsg);
@@ -466,7 +479,9 @@ void CmdProcess(int iCmdID)
       MotorRly.setTimer(g_ulOnTimeSec);
     break;
 
-    case CMD_RELAY_OFF_ID:
+    case CMD_STR_RELAY_OFF_ID:
+
+      sprintf(pResponse, "%s", CMD_STR_RELAY_OFF);
 
       #ifdef PRINT_DEBUG
         sprintf(g_arrcMsg, "Turning Relay OFF");
@@ -476,14 +491,17 @@ void CmdProcess(int iCmdID)
       MotorRly.setState(RELAY_OFF);
     break;
 
-    case CMD_START_TEST_ID:
+    case CMD_STR_START_TEST_ID:
+
+      sprintf(pResponse, "%s", CMD_STR_START_TEST);
 
       // perform self test
       SelfTest(0x01);
     break;
 
-    case CMD_CHANGE_PWD_ID:
+    case CMD_STR_CHANGE_PWD_ID:
 
+      sprintf(pResponse, "%s", CMD_STR_CHANGE_PWD);
       // change Password
       iRetVal = HC05_ChangePwd(g_iPwd);
       if(iRetVal != 0)
