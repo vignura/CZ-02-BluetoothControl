@@ -24,6 +24,10 @@
 #define RELAY_05        PIN_A2  /*DRV 20 - PC2 / ADC2 */
 #define MAX_RELAY_COUNT 5
 
+/* bluetooth pins */
+#define BTX_PIN         2
+#define BRX_PIN         3
+
 /***********************************************************************************************/
 /* comment the below macro to disable debug prints */
 #define PRINT_DEBUG
@@ -64,7 +68,7 @@
 
 /****************************************** globals ********************************************/
 /* SoftwareSerial (RX, TX) */
-SoftwareSerial SS_Bluetooth(3, 4);
+SoftwareSerial SS_Bluetooth(BRX_PIN, BTX_PIN);
 
 /* Relay objects pointers */
 Relay *Rly[MAX_RELAY_COUNT] = {0};
@@ -501,7 +505,7 @@ void CmdProcess(int iCmdID, char *pResponse)
   switch(iCmdID)
   {
     case CMD_STR_RELAY_ON_ID:
-      sprintf(pResponse, "%s", CMD_STR_RELAY_ON);
+      sprintf(pResponse, "%s %d", CMD_STR_RELAY_ON, g_ucRlySel);
 
       #ifdef PRINT_DEBUG
         sprintf(g_arrcMsg, "Turning Relay %d ON", g_ucRlySel);
@@ -513,7 +517,7 @@ void CmdProcess(int iCmdID, char *pResponse)
 
     case CMD_STR_RELAY_ON_TIMER_ID:
       
-      sprintf(pResponse, "%s", CMD_STR_RELAY_ON_TIMER);
+      sprintf(pResponse, "%s %d", CMD_STR_RELAY_ON_TIMER, g_ucRlySel);
 
       #ifdef PRINT_DEBUG
         sprintf(g_arrcMsg, "Turning Relay %d ON for %ld seconds", g_ucRlySel, g_ulOnTimeSec);
@@ -525,7 +529,7 @@ void CmdProcess(int iCmdID, char *pResponse)
 
     case CMD_STR_RELAY_OFF_ID:
 
-      sprintf(pResponse, "%s", CMD_STR_RELAY_OFF);
+      sprintf(pResponse, "%s %d", CMD_STR_RELAY_OFF, g_ucRlySel);
 
       #ifdef PRINT_DEBUG
         sprintf(g_arrcMsg, "Turning Relay %d OFF", g_ucRlySel);
@@ -677,4 +681,3 @@ int HC05_ChangePwd(int iPwd)
 
   return iRetVal;
 }
-
