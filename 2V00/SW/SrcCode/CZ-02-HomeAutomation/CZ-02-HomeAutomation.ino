@@ -626,7 +626,7 @@ void CmdProcess(int iCmdID, char *pResponse)
         sprintf(g_arrcMsg, "Turning all Relay OFF");
         Serial.println(g_arrcMsg);
       #endif
-        
+
       for(i = 0; i < MAX_RELAY_COUNT; i++)
       {
         Rly[i]->setState(RELAY_OFF);
@@ -755,8 +755,15 @@ int HC05_ChangePwd(int iPwd)
 /***********************************************************************************************/
 void storeRelayStates()
 {
+  uint8_t checksum = 0;
+  uint8_t state = 0;
+
   for(int i = 0; i < MAX_RELAY_COUNT; i++)
   {
-    EEPROM.put((i * sizeof(uint8_t)), Rly[i]->getState());
+    state = Rly[i]->getState();
+    EEPROM.put((i * sizeof(uint8_t)), state);
+    checksum ^= state;
   }
+
+  EEPROM.put(((MAX_RELAY_COUNT +1) * sizeof(uint8_t)), checksum);
 }
