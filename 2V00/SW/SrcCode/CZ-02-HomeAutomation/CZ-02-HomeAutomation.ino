@@ -1,7 +1,7 @@
 /***********************************************************************************************/
 /*
- *  \file       : CZ-02-BluetoothController.ino
- *  \date       : 02-DEC-2018 
+ *  \file       : CZ-02-HomeAutomation.ino
+ *  \date       : 02-DEC-2020 
  *  \author     : Vignesh S 
  *  \email      : vignura@gmail.com
  *  \copyright  : All Rights are Reserved 
@@ -10,7 +10,7 @@
 // headers
 #include <SoftwareSerial.h>
 #include <Relay.h>
-
+#include <EEPROM.h>
 /*************************************** Pin Mappings ******************************************/
 // HC-05 
 #define HC05_ST         PIN_A1    /* status pin */
@@ -104,12 +104,7 @@ void setup() {
   //pinMode(HC05_EN, OUTPUT);
   //digitalWrite(HC05_EN, LOW);
 
-  // Relay initialization
-  for(int i = 0; i < MAX_RELAY_COUNT; i++)
-  {
-    Rly[i] = new Relay(g_ucRlyPin[i], false);
-    Rly[i]->setState(RELAY_OFF);
-  }
+  Relay_init();
 
   // Serial port initialization
   #ifdef PRINT_DEBUG
@@ -120,6 +115,66 @@ void setup() {
 
   // perform self test
   SelfTest(SELF_TEST_COUNT);
+
+}
+
+/***********************************************************************************************/
+/*! 
+* \fn         :: Relay_init()
+* \author     :: Vignesh S
+* \date       :: 21-DEC-2020
+* \brief      :: This function initializes MAX_RELAY_COUNT relay instances with states stored
+*                EEPROM if the EEPROM Checksum is valid, else initializes the relay instances
+*                to default state (OFF)
+* \param[in]  :: None
+* \param[out] :: None
+* \return     :: None
+*/
+/***********************************************************************************************/
+void Relay_init()
+{
+  uint8_t arrState[MAX_RELAY_COUNT] = {0};
+  uint8_t ReadChecksum = 0;
+  uint8_t checksum = 0;
+
+  // read previously stored states from EEPROM
+  for(int i = 0; i < MAX_RELAY_COUNT; i++)
+  {
+    EEPROM.get((i * sizeof(uint8_t)), arrState[i]);
+    checksum ^= arrState[i];
+  }
+
+  // read checksum
+  EEPROM.get(((MAX_RELAY_COUNT +1) * sizeof(uint8_t)), ReadChecksum);
+
+  // verify checksum
+  if(ReadChecksum == checksum)
+  {
+    #ifdef PRINT_DEBUG
+      sprintf(g_arrcMsg, "Restoring relay states form EEPROM");
+      Serial.println(g_arrcMsg);
+    #endif
+
+    // Relay initialization
+    for(int i = 0; i < MAX_RELAY_COUNT; i++)
+    {
+      Rly[i] = new Relay(g_ucRlyPin[i], arrState[i], false);
+    }
+  } 
+  else
+  {
+    #ifdef PRINT_DEBUG
+      sprintf(g_arrcMsg, "EEPROM Checksum mismatch\n" "Setting all relay states to OFF");
+      Serial.println(g_arrcMsg);
+    #endif
+
+    // Relay initialization
+    for(int i = 0; i < MAX_RELAY_COUNT; i++)
+    {
+      Rly[i] = new Relay(g_ucRlyPin[i], false);
+      Rly[i]->setState(RELAY_OFF);
+    }
+  } 
 
 }
 
@@ -513,6 +568,7 @@ void CmdProcess(int iCmdID, char *pResponse)
       #endif
 
       Rly[g_ucRlySel -1]->setState(RELAY_ON);
+      storeRelayStates();
     break;
 
     case CMD_STR_RELAY_ON_TIMER_ID:
@@ -525,6 +581,7 @@ void CmdProcess(int iCmdID, char *pResponse)
       #endif
       
       Rly[g_ucRlySel -1]->setTimer(g_ulOnTimeSec);
+      storeRelayStates();
     break;
 
     case CMD_STR_RELAY_OFF_ID:
@@ -545,6 +602,7 @@ void CmdProcess(int iCmdID, char *pResponse)
 
       // perform self test
       SelfTest(0x01);
+      storeRelayStates();
     break;
 
     case CMD_STR_CHANGE_PWD_ID:
@@ -568,10 +626,12 @@ void CmdProcess(int iCmdID, char *pResponse)
         sprintf(g_arrcMsg, "Turning all Relay OFF");
         Serial.println(g_arrcMsg);
       #endif
+        
       for(i = 0; i < MAX_RELAY_COUNT; i++)
       {
         Rly[i]->setState(RELAY_OFF);
       }
+      storeRelayStates();
     break;
 
     default:
@@ -680,4 +740,23 @@ int HC05_ChangePwd(int iPwd)
   delay(10);
 
   return iRetVal;
+}
+
+/***********************************************************************************************/
+/*! 
+* \fn         :: storeRelayStates()
+* \author     :: Vignesh S
+* \date       :: 21-DEC-2020
+* \brief      :: This function stores the present relay states to EEPROM starting from zeroth
+*                location.
+* \param[in]  :: none
+* \return     :: none
+*/
+/***********************************************************************************************/
+void storeRelayStates()
+{
+  for(int i = 0; i < MAX_RELAY_COUNT; i++)
+  {
+    EEPROM.put((i * sizeof(uint8_t)), Rly[i]->getState());
+  }
 }
