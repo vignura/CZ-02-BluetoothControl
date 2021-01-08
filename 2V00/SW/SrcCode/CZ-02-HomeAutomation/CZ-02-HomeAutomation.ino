@@ -11,6 +11,7 @@
 #include <SoftwareSerial.h>
 #include <Relay.h>
 #include <EEPROM.h>
+#include <Switch.h>
 /*************************************** Pin Mappings ******************************************/
 // HC-05 
 #define HC05_ST         PIN_A1    /* status pin */
@@ -28,6 +29,17 @@
 #define BTX_PIN         2
 #define BRX_PIN         3
 
+#define SWITCH_1_PIN    4   /* OE# */
+#define SWITCH_2_PIN    5   /* RCLK */
+#define SWITCH_3_PIN    6   /* CLR# */
+#define SWITCH_4_PIN    11  /* MOSI */
+#define SWITCH_5_PIN    13  /* SCK */
+#define MAX_SWITCHES    MAX_RELAY_COUNT
+
+#define SWITCH_DEBOUNCE_TIME_MS   50
+uint8_t switch_pin[MAX_SWITCHES] = {SWITCH_1_PIN, SWITCH_2_PIN, SWITCH_3_PIN, SWITCH_4_PIN, SWITCH_5_PIN};
+Switch* swtch[MAX_SWITCHES];
+
 /***********************************************************************************************/
 /* comment the below macro to disable debug prints */
 #define PRINT_DEBUG
@@ -38,7 +50,7 @@
 #define MAX_DEBUG_MSG_SIZE                  128
 #define MAX_CMD_STRING_SIZE                 32
 
-#define SELF_TEST_COUNT                     0x01
+#define SELF_TEST_COUNT                     0x00
 #define HC05_BUAD_RATE                      9600
 #define DEBUG_BUAD_RATE                     9600
 #define HC05_SERIAL_READ_DELAY_MS           0x02
@@ -120,6 +132,27 @@ void setup() {
 
 /***********************************************************************************************/
 /*! 
+* \fn         :: Switch_init()
+* \author     :: Vignesh S
+* \date       :: 08-Jan-2020
+* \brief      :: This function initializes the switch class instances.
+* \param[in]  :: None
+* \param[out] :: None
+* \return     :: None
+*/
+/***********************************************************************************************/
+void Switch_init()
+{
+  uint8_t i = 0;
+  
+  for(i = 0; i < MAX_SWITCHES; i++)
+  {
+    swtch[i] = new Switch(switch_pin[i], INPUT_PULLUP, SWITCH_OFF, SWITCH_DEBOUNCE_TIME_MS);
+  }
+}
+
+/***********************************************************************************************/
+/*! 
 * \fn         :: Relay_init()
 * \author     :: Vignesh S
 * \date       :: 21-DEC-2020
@@ -192,10 +225,11 @@ void Relay_init()
 /***********************************************************************************************/
 void loop() {
 
+  int i = 0;
+  uint8_t state = 0;
   char arrcCmd[MAX_CMD_STRING_SIZE] = {0};
   int iReadBytes = 0;
   int iCmdID = 0;
-  int iEmgStopState = 0;
 
   // read data from HC-05 if available
   iReadBytes = RecvCmd(arrcCmd, MAX_CMD_STRING_SIZE); 
@@ -226,6 +260,34 @@ void loop() {
   for(int i = 0; i < MAX_RELAY_COUNT; i++)
   {
     Rly[i]->TimerTask();
+  }
+
+  for(i = 0; i < MAX_SWITCHES; i++)
+  {
+    swtch[i]->SwitchTask();
+    if(swtch[i]->isStateChanged())
+    {
+      state = swtch[i]->getState();
+      if(state == SWITCH_OFF)
+      {
+        Rly[i]->setState(RELAY_OFF);
+        sprintf(g_arrcBTMsg, "%s %d", CMD_STR_RELAY_ON, (i +1));
+      }
+      else
+      {
+        Rly[i]->setState(RELAY_ON);
+        sprintf(g_arrcBTMsg, "%s %d", CMD_STR_RELAY_OFF, (i +1));
+      }
+
+      #ifdef SEND_BTRES
+        SS_Bluetooth.println(g_arrcBTMsg);
+      #endif
+
+      #ifdef PRINT_DEBUG
+        sprintf(g_arrcMsg, "Switching relay %d to %s state", (i +1), (state == SWITCH_OFF)? "OFF": "ON");
+        Serial.println(g_arrcMsg);    
+      #endif  
+    }
   }
 
 }
