@@ -116,6 +116,7 @@ void setup() {
   //pinMode(HC05_EN, OUTPUT);
   //digitalWrite(HC05_EN, LOW);
 
+  Switch_init();
   Relay_init();
 
   // Serial port initialization
@@ -264,6 +265,11 @@ void loop() {
 
   for(i = 0; i < MAX_SWITCHES; i++)
   {
+    // #ifdef PRINT_DEBUG
+    //   sprintf(g_arrcMsg, "Performing Switch task");
+    //   Serial.println(g_arrcMsg);    
+    // #endif
+
     swtch[i]->SwitchTask();
     if(swtch[i]->isStateChanged())
     {
@@ -271,12 +277,12 @@ void loop() {
       if(state == SWITCH_OFF)
       {
         Rly[i]->setState(RELAY_OFF);
-        sprintf(g_arrcBTMsg, "%s %d", CMD_STR_RELAY_ON, (i +1));
+        sprintf(g_arrcBTMsg, "%s %d", CMD_STR_RELAY_OFF, (i +1));
       }
       else
       {
         Rly[i]->setState(RELAY_ON);
-        sprintf(g_arrcBTMsg, "%s %d", CMD_STR_RELAY_OFF, (i +1));
+        sprintf(g_arrcBTMsg, "%s %d", CMD_STR_RELAY_ON, (i +1));
       }
 
       #ifdef SEND_BTRES
